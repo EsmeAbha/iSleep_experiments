@@ -1,0 +1,30 @@
+# ---- Large derived artifacts -------------------------------------------------
+# results/npz/ holds ~172 MB of regenerable arrays (embeddings.npz and
+# supp_artifacts.npz are ~86 MB each). GitHub warns above 50 MB and hard-rejects
+# above 100 MB, and these are *derived* data: they are rebuilt by
+# mmnet_repro.run_config(..., save_embed=True). Keep them out of history.
+# See REPRODUCIBILITY.md for how to obtain or regenerate them.
+results/npz/
+
+# Source archive (superseded by the unpacked tree; ~169 MB)
+all_codes.zip
+_extract/
+
+# Trained checkpoints / regenerated run cache
+results/revision/
+*.pt
+*.pth
+
+# ---- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# ---- Raw clinical data (never commit: iSLEEPS PSG is access-controlled) -------
+data/
+
+# Root-level duplicate of paper/multimodal.pdf (the uploaded original)
+multimodal (2).pdf
