@@ -15,19 +15,23 @@ circularity):
     ECG:   std, line-length                            (cardiac activity)
     Flow:  std, line-length                            (airflow amplitude / variability)
     Thorax/Abdomen/Effort: std each                    (respiratory effort amplitude)
-    thoraco-abdominal asynchrony: |corr(Thorax,Abdomen)| (paradoxical breathing in apnea)
+    thoraco-abdominal asynchrony: corr(Thorax,Abdomen)  (paradoxical breathing in apnea)
+        -- SIGNED, deliberately: +1 is synchronous breathing and -1 is paradoxical,
+           and it is the negative end that marks an obstructive event. Taking the
+           absolute value would fold those two opposite states onto each other.
 Then +/-3 epoch context (same as the EEG features) and the ensemble is retrained.
 
-  KMP_DUPLICATE_LIB_OK=TRUE python extra/cardio_features.py
+  KMP_DUPLICATE_LIB_OK=TRUE python code/cardio_features.py
 """
 import os, sys, glob, json
 import numpy as np
 from sklearn.ensemble import HistGradientBoostingClassifier
-from sklearn.utils.class_weight import compute_sample_weight
 from sklearn.metrics import accuracy_score, f1_score, cohen_kappa_score
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "utils"))
+CODE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(CODE)
+if CODE not in sys.path:                      # importable as a module, not just as a script
+    sys.path.insert(0, CODE)
 from datasets import make_folds, DUPLICATE_DROP, CLASS_NAMES  # noqa
 MM = os.path.join(ROOT, "data", "multimodal")
 FC = os.path.join(ROOT, "data", "featseq_cache")
@@ -78,7 +82,7 @@ def build():
     return data
 
 
-def run(data, use_cardio, subs, folds):
+def run(data, use_cardio, folds):
     accs, mf1s, kaps, pcfs = [], [], [], []
     for tr, te in folds:
         def X(s):
@@ -119,7 +123,7 @@ def main():
     print(f"{len(subs)} subjects ({full} with cardio) | HistGB + HMM, 10-fold subject-independent\n", flush=True)
     folds = make_folds(subs, 10, seed=42)
     for tag, uc in [("EEG only            ", False), ("EEG + cardiorespiratory", True)]:
-        a, asd, m, k, pc = run(data, uc, subs, folds)
+        a, asd, m, k, pc = run(data, uc, folds)
         print(f"{tag}  acc={a:.4f}+-{asd:.4f}  mF1={m:.4f}  kappa={k:.4f}  "
               f"per-class={[round(float(x),3) for x in pc]}", flush=True)
     print("\n(EEG-only here uses HistGB alone; our full 4-booster ensemble is 0.7464.)")

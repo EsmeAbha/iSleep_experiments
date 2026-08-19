@@ -20,22 +20,19 @@ import torch, torch.nn as nn
 from sklearn.metrics import (accuracy_score, cohen_kappa_score, f1_score,
                              roc_auc_score, average_precision_score)
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "model")); sys.path.insert(0, os.path.join(ROOT, "utils"))
-sys.path.insert(0, os.path.join(ROOT, "processing"))
+CODE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(CODE)
+if CODE not in sys.path:                      # importable as a module, not just as a script
+    sys.path.insert(0, CODE)
 from mm_feature_net import MMFeatureNet  # noqa
-try:
-    from datasets import DUPLICATE_DROP, make_folds  # noqa
-except Exception:
-    DUPLICATE_DROP = {28}
-    def make_folds(subs, k, seed=42):
-        r = np.random.RandomState(seed); s = list(subs); r.shuffle(s)
-        folds = [s[i::k] for i in range(k)]
-        return [([x for j, f in enumerate(folds) if j != i for x in f], folds[i]) for i in range(k)]
+from datasets import DUPLICATE_DROP, make_folds  # noqa
+# Imported explicitly and allowed to fail loudly. This used to sit behind a
+# try/except that fell back to a second, inline copy of make_folds; a silent
+# fallback to a duplicate fold builder is the last thing you want in the module
+# that defines the evaluation protocol.
 
 FE = os.path.join(ROOT, "data", "mm_features")
 REV = os.path.join(ROOT, "results", "revision"); RUNS = os.path.join(REV, "runs")
-os.makedirs(RUNS, exist_ok=True)
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 L, NC, EPS = 20, 5, 1e-12
 CLS = ["W", "N1", "N2", "N3", "R"]
@@ -205,6 +202,7 @@ def run_config(name, fusion="concat", eeg_drop=(), card_drop=(), force=False, sa
     cache = os.path.join(RUNS, f"{name}.json")
     if os.path.exists(cache) and not force:
         return json.load(open(cache))
+    os.makedirs(RUNS, exist_ok=True)   # created here, not at import time
     data = load_data(); subs = sorted(data)
     folds = make_folds(subs, 10, seed=42)
     per_fold, per_subj = [], {}
