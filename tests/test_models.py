@@ -11,6 +11,9 @@ The claims these pin down are the ones the ablation table depends on:
 Skipped as a group when torch is not installed, so the rest of the suite still
 runs in a light environment.
 """
+import csv
+import os
+
 import pytest
 
 torch = pytest.importorskip("torch", reason="torch not installed")
@@ -58,23 +61,38 @@ class TestMMFeatureNet:
         n = sum(p.numel() for p in MMFeatureNet(fusion=fusion).parameters())
         assert n / 1e6 == pytest.approx(millions, abs=0.001)
 
-    def test_reported_0_86M_is_the_cross_model_not_the_headline_concat(self):
-        """Documents a live inconsistency in the results tables.
+    def test_reported_parameter_count_matches_the_headline_architecture(self):
+        """Ties results/headline_metrics.csv to the actual model.
 
-        results/headline_metrics.csv records params_million=0.86, and
-        results/staging_benchmark.csv gives 0.86 to the row whose accuracy
-        (0.721) is the *concat* result. But 0.86 M is the parameter count of the
-        cross-attention variant; concat has 0.773 M.
-
-        VERIFICATION_LOG row 4 records that the paper originally quoted the
-        concat metrics under an "cross-modal attention" description and that
-        concat was then made the stated headline. This parameter count looks like
-        the one figure that switch missed. Flagged in REPRODUCIBILITY.md.
+        This value was 0.86 M, which is the *cross-attention* variant's size. The
+        headline is concat (mmnet_repro runs run_config("headline_concat",
+        fusion="concat")), so the reported figure belonged to a model that is an
+        ablation, not the headline -- the one number the attention -> concat
+        switch in VERIFICATION_LOG row 4 missed. Corrected to 0.773 M and pinned
+        here so a future architecture change cannot silently stale the table.
         """
-        size = lambda f: sum(p.numel() for p in MMFeatureNet(fusion=f).parameters()) / 1e6
-        assert size("cross") == pytest.approx(0.86, abs=0.005)
-        assert size("concat") == pytest.approx(0.77, abs=0.005)
-        assert size("concat") < size("cross")
+        csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "results", "headline_metrics.csv")
+        with open(csv_path, newline="", encoding="utf-8") as fh:
+            reported = {r["metric"]: r["value"] for r in csv.DictReader(fh)}
+        measured = sum(p.numel() for p in MMFeatureNet(fusion="concat").parameters()) / 1e6
+        assert float(reported["params_million"]) == pytest.approx(measured, abs=0.001)
+
+    def test_both_benchmark_rows_share_the_concat_architecture(self):
+        """staging_benchmark.csv's two MM-Net rows must report the same size.
+
+        "neural only" is not a different network: the engine cache records it as
+        fusion=concat with card_drop=['all'], i.e. the same architecture with the
+        cardio feature columns zeroed. Different parameter counts on those two
+        rows would mean the ablation changed the model rather than the input.
+        """
+        csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "results", "staging_benchmark.csv")
+        with open(csv_path, newline="", encoding="utf-8") as fh:
+            rows = {r["model"]: r for r in csv.DictReader(fh)}
+        measured = sum(p.numel() for p in MMFeatureNet(fusion="concat").parameters()) / 1e6
+        for name in ("MM-Net (neural only)", "MM-Net (neural+cardio)"):
+            assert float(rows[name]["params_M"]) == pytest.approx(measured, abs=0.001), name
 
     def test_cross_fusion_has_more_parameters_than_concat(self):
         cross = sum(p.numel() for p in MMFeatureNet(fusion="cross").parameters())
