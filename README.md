@@ -16,7 +16,7 @@ for staging, 96 with a complete cardiorespiratory montage), evaluated
 | best single-EEG baseline (AttnSleep) | acc 0.686 | — |
 | best cardio-feature baseline (gradient boosting) | — | AUC 0.670 |
 
-0.77 M parameters. See [REPRODUCIBILITY.md](REPRODUCIBILITY.md) §4a — the
+0.773 M parameters. See [REPRODUCIBILITY.md](REPRODUCIBILITY.md) §4a — the
 0.86 M figure in the results tables is the cross-attention variant's size, not
 the headline model's.
 
@@ -26,7 +26,7 @@ the headline model's.
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-pytest tests/ -q                    # 88 tests, no data or GPU needed (~3 s)
+pytest tests/ -q                    # 89 tests, no data or GPU needed (~3 s)
 python scripts/verify_headline.py   # recompute the paper's numbers from saved predictions
 ```
 

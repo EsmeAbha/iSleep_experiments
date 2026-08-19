@@ -95,10 +95,10 @@ central-apnea gap is a real run-to-run difference, not a definitional one.
 
 ## 4. Discrepancies found in the recorded results
 
-**a. The reported parameter count belongs to the wrong model.**
-`headline_metrics.csv` records `params_million,0.86`, and `staging_benchmark.csv`
-gives 0.86 to the row whose accuracy (0.721) is the concat result. Measured
-directly:
+**a. The reported parameter count belonged to the wrong model. — FIXED**
+`headline_metrics.csv` recorded `params_million,0.86`, and
+`staging_benchmark.csv` gave 0.86 to the row whose accuracy (0.721) is the
+concat result. Measured directly:
 
 | fusion | parameters |
 |---|---|
@@ -109,9 +109,32 @@ directly:
 0.86 M is the cross-attention variant. The headline model is concat —
 `mmnet_repro.py` runs `run_config("headline_concat", fusion="concat")`, and
 VERIFICATION_LOG row 4 states concat was made the headline with attention
-demoted to an ablation. The parameter count appears to be the one figure that
-switch missed. **The headline model should be reported as 0.77 M, not 0.86 M.**
-Pinned by `tests/test_models.py::test_reported_0_86M_is_the_cross_model_not_the_headline_concat`.
+demoted to an ablation. The parameter count was the one figure that switch
+missed.
+
+The engine cache settles it. `results/engine_cache_per_fold/*.json` records the
+config each run used:
+
+| run | fusion | card_drop |
+|---|---|---|
+| `headline_concat` | `concat` | — |
+| `attention_cross` | `cross` | — |
+| `neural_only` | **`concat`** | `['all']` |
+
+So `staging_benchmark.csv`'s "MM-Net (neural only)" row is *not* a smaller
+network — it is the same concat architecture with the cardio feature columns
+zeroed, exactly as `mmnet_repro`'s docstring describes ablation ("the model
+architecture is unchanged; the information is removed"). Both MM-Net rows are
+therefore the same architecture and must report the same size.
+
+Corrected to **0.773 M** in both files. Two tests now read the CSVs and compare
+them against a freshly constructed model, so the tables cannot drift from the
+code again:
+`test_reported_parameter_count_matches_the_headline_architecture` and
+`test_both_benchmark_rows_share_the_concat_architecture`.
+
+If `0.86 M` also appears in `paper/multimodal.pdf`, it needs the same correction
+there — the repo and the paper now disagree.
 
 **b. Severity-band patient counts disagree with the verification log.**
 `staging_by_severity.csv` lists 14 / 22 / 23 / 37 patients (= 96, the
@@ -119,42 +142,74 @@ respiratory cohort). VERIFICATION_LOG row 10 states 15 / 24 / 23 / 38 (= 100).
 Both can be right — the CSV is restricted to subjects with predictions — but
 neither document says so. Worth one clarifying sentence.
 
-## 5. Code issues worth fixing
+## 5. Code issues — all fixed
 
-**Fold assignment depends on input order, not just the seed.**
-`make_folds` shuffles the caller's list *in place* and then strides it, so the
-same `seed=42` with a differently ordered subject list produces a different
-partition. Every current caller passes `sorted(data)`, so the published folds
-are well defined — but anything that changes iteration order (a `glob` returning
-a new order, an unsorted dict) would silently invalidate every cached per-fold
-result and every number derived from it. Both behaviours are pinned in
-`tests/test_datasets.py`. A one-line `sids = sorted(subjects)` inside
-`make_folds` would remove the hazard.
+**Fold assignment depended on input order, not just the seed. — FIXED**
+`make_folds` shuffled the caller's list *in place* and then strided it, so the
+same `seed=42` with a differently ordered subject list produced a different
+partition. Every caller passes `sorted(data)`, so the published folds were well
+defined — but anything that changed iteration order (a `glob` returning a new
+order, an unsorted dict) would have silently invalidated every cached per-fold
+result while still looking deterministic.
 
-**Stale `sys.path` entries.** `mmnet_repro.py` inserts `ROOT/model`,
-`ROOT/utils` and `ROOT/processing`; `cardio_features.py` inserts `ROOT/utils`.
-None of those directories exist — they are leftovers from an earlier layout. The
-imports still succeed, because the modules all sit in `code/` and Python puts a
-script's own directory on `sys.path`. So this is dead, misleading code rather
-than breakage, but it means the intended import path is not the one being used.
-`cardio_features.py`'s docstring likewise still says `python extra/cardio_features.py`.
+`make_folds` now sorts its input before shuffling. **The published folds are
+byte-identical** — verified by regenerating the k=5 and k=10 partitions before
+and after the change and diffing them. Fold 0's test subjects
+(`[4, 33, 36, 43, 51, 64, 76, 85, 96, 100]`) are now pinned as a regression
+guard, and `test_partition_depends_on_the_seed_alone` checks reversed, rotated
+and shuffled input all produce the same partition.
 
-**Importing `mmnet_repro` has a filesystem side effect.** `os.makedirs(RUNS)`
-runs at module scope, so merely importing it creates `results/revision/runs/`.
-Collecting the test suite is enough to trigger it. That path is gitignored, but
-directory creation belongs inside `run_config`, not at import time.
+**Stale `sys.path` entries. — FIXED** `mmnet_repro.py` inserted `ROOT/model`,
+`ROOT/utils` and `ROOT/processing`; `cardio_features.py` inserted `ROOT/utils`.
+None of those directories exist — leftovers from an earlier layout. The imports
+still succeeded, because the modules all sit in `code/` and Python puts a
+script's own directory on `sys.path`, so this was dead, misleading code rather
+than breakage. Both now add `code/` explicitly, which also makes them importable
+as modules and not only runnable as scripts. `cardio_features.py`'s docstring no
+longer says `python extra/cardio_features.py`.
 
-**`cardio_features.cardio_feats` docstring contradicts the code.** It documents
+**A silent fallback to a duplicate fold builder. — FIXED** `mmnet_repro.py`
+wrapped `from datasets import make_folds` in a bare `try/except` that fell back
+to a second, inline copy of the fold logic. The two happened to agree on fold
+membership, but a silent fallback to a duplicate implementation in the module
+that *defines the evaluation protocol* is the wrong failure mode — if they ever
+diverged, every reported metric would quietly describe a different split. The
+import is now explicit and fails loudly. CI asserts
+`mmnet_repro.make_folds is datasets.make_folds`.
+
+**Importing `mmnet_repro` had a filesystem side effect. — FIXED**
+`os.makedirs(RUNS)` ran at module scope, so merely importing it created
+`results/revision/runs/`; collecting the test suite was enough to trigger it.
+Moved inside `run_config`, and CI asserts the directory is absent after import.
+
+**`cardio_feats` docstring contradicted the code. — FIXED** It documented
 thoraco-abdominal asynchrony as `|corr(Thorax, Abdomen)|`, but the implementation
-stores the *signed* correlation. Signed is the more useful choice — it separates
-paradoxical from synchronous breathing, which is the obstructive-event marker —
-so the docstring is what is wrong. Pinned in `tests/test_cardio_features.py`.
+stores the *signed* correlation. Signed is the correct choice — +1 is
+synchronous breathing and −1 paradoxical, and it is the negative end that marks
+an obstructive event, so taking the absolute value would fold two opposite
+physiological states onto each other. The docstring was what was wrong; it now
+says so explicitly. Behaviour pinned in `tests/test_cardio_features.py`.
 
-**Minor:** `cardio_features.run()` takes a `subs` parameter it never uses.
+**Minor. — FIXED** `cardio_features.run()` took a `subs` parameter it never
+used; dropped, along with an unused `compute_sample_weight` import.
 
-## 6. Test suite
+## 6. Continuous integration
 
-88 tests, no data or GPU required, ~3 s:
+`.github/workflows/ci.yml` runs on every push and pull request, on Python 3.10
+and 3.12:
+
+1. `pytest tests/ -q`
+2. `scripts/verify_headline.py` — only when `results/npz/predictions.npz` is
+   present. It is gitignored, so on a normal runner this step reports that and
+   moves on rather than failing the build; it does real work on a self-hosted
+   runner or one that restores the artifacts from a cache.
+3. An import-hygiene check guarding the fixes above: the reproduction modules
+   import cleanly, `mmnet_repro` uses the shared fold builder, and importing it
+   creates no directories.
+
+## 7. Test suite
+
+89 tests, no data or GPU required, ~3 s:
 
 | File | Covers |
 |---|---|
