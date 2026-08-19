@@ -47,9 +47,17 @@ def load_subject(sid, proc_dir=PROC_DIR, channels=None, normalize=True):
 
 
 def make_folds(subjects, n_splits=5, seed=42):
-    """Deterministic subject-disjoint k-fold. Returns list of (train_sids, test_sids)."""
+    """Deterministic subject-disjoint k-fold. Returns list of (train_sids, test_sids).
+
+    `subjects` is sorted before shuffling so the partition is a function of the
+    seed alone. Without that, the caller's iteration order silently becomes part
+    of the fold assignment -- a glob returning files in a different order, or an
+    unsorted dict, would reshuffle the folds and invalidate every cached per-fold
+    result while still looking deterministic. Callers already pass sorted(data),
+    so this does not change the published folds; it just removes the trap.
+    """
     rng = np.random.RandomState(seed)
-    sids = list(subjects)
+    sids = sorted(subjects)
     rng.shuffle(sids)
     folds = [sids[i::n_splits] for i in range(n_splits)]
     out = []

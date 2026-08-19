@@ -5,6 +5,8 @@ project: every headline number is "10-fold patient-independent, seed 42". If
 folds ever overlapped between train and test, every metric in the paper would be
 optimistic. These tests need no data on disk.
 """
+import random
+
 import numpy as np
 import pytest
 
@@ -45,25 +47,32 @@ class TestMakeFolds:
     def test_different_seeds_give_different_partitions(self):
         assert make_folds(SUBJECTS, 10, seed=42) != make_folds(SUBJECTS, 10, seed=7)
 
-    def test_partition_is_stable_for_sorted_input(self):
-        """The seed alone does not fix the partition -- the *input order* is part
-        of it, because make_folds shuffles the caller's list in place before
-        striding it. Every caller in the repo passes `sorted(data)`, so the
-        published folds are well defined; this test pins that contract.
+    def test_partition_depends_on_the_seed_alone(self):
+        """make_folds sorts its input before shuffling, so the caller's iteration
+        order is not part of the fold assignment. Before that fix, a glob
+        returning files in a new order would have silently reshuffled the folds
+        and invalidated every cached per-fold result while still looking
+        deterministic. See REPRODUCIBILITY.md.
         """
-        a = make_folds(sorted(SUBJECTS), 10, seed=42)
-        b = make_folds(sorted(SUBJECTS), 10, seed=42)
-        assert a == b
+        expected = make_folds(sorted(SUBJECTS), 10, seed=42)
+        for label, order in [
+            ("reversed", list(reversed(sorted(SUBJECTS)))),
+            ("rotated", SUBJECTS[37:] + SUBJECTS[:37]),
+            ("shuffled", random.Random(9).sample(SUBJECTS, len(SUBJECTS))),
+        ]:
+            assert make_folds(order, 10, seed=42) == expected, \
+                "fold assignment changed for %s input order" % label
 
-    def test_fold_assignment_depends_on_input_order(self):
-        """Companion to the test above, documenting the fragility explicitly:
-        the same seed with a differently ordered subject list yields a DIFFERENT
-        partition. Anything that changes iteration order (a glob returning a new
-        order, a dict no longer sorted) would silently invalidate every cached
-        per-fold result. Callers must keep sorting. See REPRODUCIBILITY.md.
+    def test_published_fold_assignment_is_unchanged(self):
+        """Regression guard on the exact partition every reported number uses.
+
+        Fold 0's test subjects under the published protocol (10-fold, seed 42,
+        cohort minus the SN28 duplicate). If this ever changes, the cached
+        per-fold results and the paper's metrics no longer describe the same
+        split.
         """
-        assert make_folds(sorted(SUBJECTS), 10, seed=42) \
-            != make_folds(list(reversed(sorted(SUBJECTS))), 10, seed=42)
+        _, test0 = make_folds(SUBJECTS, 10, seed=42)[0]
+        assert test0 == [4, 33, 36, 43, 51, 64, 76, 85, 96, 100]
 
     @pytest.mark.parametrize("k", [5, 10])
     def test_folds_are_balanced_within_one_subject(self, k):
