@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # CPU-only torch: the GPU build is a ~2.5 GB download and nothing here
+          # needs CUDA -- the tests construct models and run forward/backward on
+          # tiny synthetic batches.
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy scipy scikit-learn pytest
+
+      - name: Run test suite
+        run: pytest tests/ -q
+
+      - name: Verify reported results against saved predictions
+        run: |
+          # results/npz/ is gitignored (~172 MB), so the artifacts are normally
+          # absent on a fresh clone and this step reports that rather than
+          # failing the build. It does real work on any runner that has them
+          # (self-hosted, or a workflow that restores them from a cache).
+          if [ -f results/npz/predictions.npz ]; then
+            python scripts/verify_headline.py
+          else
+            echo "results/npz/predictions.npz not present - skipping."
+            echo "See REPRODUCIBILITY.md section 2."
+          fi
+
+      - name: Check the reproduction modules import cleanly
+        run: |
+          # Guards the import hygiene fixed in this commit: no stale sys.path
+          # entries, no silent fallback to a duplicate fold builder, and no
+          # directory creation as an import side effect.
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, "code")
+          import mmnet_repro, cardio_features, datasets, features, features_v2
+          assert mmnet_repro.make_folds is datasets.make_folds, \
+              "mmnet_repro is not using the shared fold builder"
+          assert not os.path.exists("results/revision"), \
+              "importing mmnet_repro created directories as a side effect"
+          print("imports clean")
+          PY
