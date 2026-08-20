@@ -37,7 +37,7 @@ size — see [REPRODUCIBILITY.md](REPRODUCIBILITY.md) §2.
 
 ```
 code/            model, features and the reproduction engine
-notebooks/       the two executed notebooks every reported number comes from
+notebooks/       executed notebooks with saved outputs (see the traceability map below)
 results/         summary CSVs, per-experiment JSON, and (gitignored) npz artifacts
 paper/           multimodal.pdf
 scripts/         verify_headline.py — one-command claim check
@@ -157,6 +157,44 @@ exported copy in `results/`. Cell numbers count code cells only, from 1.
 | **Parameter count: `params: 773254`** | `3_figure_hypnogram` | 4 |
 | 97 EDFs discovered; per-subject epoch counts and stage distributions | `0_preprocessing` | 1 |
 
+### Exploratory staging experiments — `isleep-final-version.ipynb`
+
+Four alternative staging approaches on iSLEEPS: engineered features + XGBoost
+(+ HMM decoding), a raw-signal per-epoch CNN, a CNN+BiLSTM over epoch sequences,
+and a hemispheric-asymmetry graph with a selective state-space model over the
+homologous pairs C4↔C3 and O2↔O1.
+
+**These numbers are not the paper's and should not be read as reproducing it.**
+The notebook's own outputs record a reduced pilot protocol:
+
+| | this notebook | the paper |
+|---|---|---|
+| subjects | **20** | 96 (respiratory) / 99 (staging) |
+| epochs | **18,621** | 89,532 |
+| cross-validation | **3-fold** | 10-fold |
+| training | 10 epochs per fold | 45 with early stopping |
+
+Its best staging result is `features + XGBoost acc=0.6340`, `+ HMM acc=0.6370`,
+against the paper's 0.722. The model sizes (439,685 / 1,099,781 / 159,037
+parameters) are likewise none of them MM-Net's 773,254. Treat this notebook as
+the architecture-exploration stage that motivated the final design, not as
+evidence for any table in the manuscript.
+
+### Third-party notebook — `isleep-nb10.ipynb`
+
+**Not this project's work, and not by these authors.** It is a public Kaggle
+notebook by user **itsuki9180**, written for the *Child Mind Institute — Detect
+Sleep States* competition (see the "My other works" cell, which links to
+`kaggle.com/code/itsuki9180/detect-sleep-states-dataprepare`). It reads
+`/kaggle/input/child-mind-institute-detect-sleep-states/` and emits a
+`series_id`/`step`/`onset`/`wakeup` competition submission from wrist
+accelerometry.
+
+It shares no data, task, label set or architecture with this paper, which does
+5-class AASM staging and respiratory-event detection on clinical PSG. **No number
+or figure in the manuscript comes from it.** It is retained here only as
+background reading and is credited to its author above.
+
 ### What does **not** trace to a notebook cell
 
 Stated plainly, because the traceability requirement is only meaningful if the
@@ -166,7 +204,9 @@ gaps are named:
   DeepSleepNet, AttnSleep, CNN+BiLSTM, Sleep-EDF transfer and the raw multimodal
   CNN — are **not** produced by any notebook here. They come from separate runs
   saved under `results/experiment_json/`. Only the two MM-Net rows trace to
-  notebook 1, cell 6.
+  notebook 1, cell 6. `isleep-final-version.ipynb` trains architectures of the
+  same families, but on the 20-subject 3-fold pilot protocol described above, so
+  its numbers are not those table rows either.
 - **Notebooks 1–3 cannot be re-executed** in this repository: they read
   `data/mm_features/`, which holds access-controlled clinical PSG and is
   gitignored. Their saved outputs are the record. The metric layer *can* be
