@@ -91,6 +91,94 @@ See VERIFICATION_LOG row 4.
 - Predicted per-patient event burden correlates with clinical AHI
   (Spearman ρ = 0.315, p = 0.002, n = 96).
 
+## Environment and hardware
+
+Taken from the saved notebook metadata and cell outputs, not reconstructed.
+
+| | |
+|---|---|
+| **Training/eval GPU** | NVIDIA GeForce RTX 2060 (CUDA) — printed by notebooks 1, 2 and 3 |
+| **Training host** | Windows, working directory `D:\MOB-EEG` |
+| **Preprocessing host** | Kaggle (`/kaggle/input/...`, `/kaggle/working/isleep_cache`) |
+| **Python** | 3.12.13 (`0_preprocessing`), 3.12.3 (`3_figure_hypnogram`) |
+| **Kernel** | Python 3 (ipykernel) for all four notebooks |
+| **Dependencies** | `requirements.txt` — numpy, scipy, scikit-learn, torch, matplotlib, pandas, openpyxl |
+
+Two honest caveats about this table:
+
+- **Notebooks 1 and 2 record no Python version** in their metadata (`language_info`
+  is absent), and **no notebook records the torch/numpy/sklearn versions** it ran
+  against. Those are therefore not stated here rather than guessed. If exact
+  versions are needed, re-run any notebook with a `pip freeze` cell.
+- The **test suite** in `tests/` is CPU-only and needs no GPU. It is verified
+  against numpy 2.5.2, scipy 1.18.0, scikit-learn 1.9.0 and a CPU torch build,
+  and CI runs it on Python 3.10 and 3.12.
+
+Runtimes actually recorded: the supplementary retrain took **353 s**
+(`2_supplementary_analysis`, cell 2); `VERIFICATION_LOG.md` records the full
+main-notebook run at **82.4 min**.
+
+## Where each paper result comes from
+
+Every row below names the notebook and cell that produced the number, plus the
+exported copy in `results/`. Cell numbers count code cells only, from 1.
+
+### Headline and ablations — `1_MM_Net_reproduction.ipynb`
+
+| Result | Cell | Exported to |
+|---|---|---|
+| Cohort: 96 subjects, 89,532 epochs, 16.0% event prevalence | 2 | — |
+| Feature split: EEG 112 / EOG 50 / EMG 26 (= 188) | 3 | — |
+| Model definition (`FeatMLP`, fusion, BiLSTM, two heads) | 4 | `code/mm_feature_net.py` |
+| **Headline**: staging 0.722 / mF1 0.651 / κ 0.611, resp AUC 0.711 / AP 0.337 | **6** | `headline_metrics.csv` |
+| Per-class F1 (W/N1/N2/N3/R) | 6 | `per_class_f1.csv` |
+| Fusion ablation: cross-attention vs concat | 7 | `engine_cache_per_fold/attention_cross*` |
+| Respiratory baselines: desat rule, logreg, gradient boosting | 8 | `respiratory_baselines.csv` |
+| **Modality ablation grid** (leave-one-out) | **9** | `modality_ablation_grid.csv` |
+| Cumulative modality ablation | 10 | — |
+| Per-event-type AUC; AHI join | 11 | `per_event_type_auc.csv` |
+| Spearman AHI correlation; Wilcoxon over folds | 12 | `ahi_clinical_validation.csv` |
+| Figure: t-SNE of embeddings | 13 | `fig_embedding_tsne.pdf` |
+| Figure: confusion matrix | 14 | `fig_confusion.pdf` |
+
+### Supplementary — `2_supplementary_analysis.ipynb`
+
+| Result | Cell |
+|---|---|
+| Headline retrain, seed 42 → acc **0.7223** (determinism check) | 2 |
+| AHI ρ=0.315, p=0.00174, n=96; severity bands; per-event-type AUC | 3 |
+| Figures: t-SNE, confusion, ablation grid, resp baselines, event type, severity | 6–12 |
+
+### Qualitative and preprocessing
+
+| Result | Notebook | Cell |
+|---|---|---|
+| Whole-night hypnogram, held-out subject SN90 | `3_figure_hypnogram` | 7–8 |
+| **Parameter count: `params: 773254`** | `3_figure_hypnogram` | 4 |
+| 97 EDFs discovered; per-subject epoch counts and stage distributions | `0_preprocessing` | 1 |
+
+### What does **not** trace to a notebook cell
+
+Stated plainly, because the traceability requirement is only meaningful if the
+gaps are named:
+
+- **The published deep baselines** in `staging_benchmark.csv` — CNN-ResNet18,
+  DeepSleepNet, AttnSleep, CNN+BiLSTM, Sleep-EDF transfer and the raw multimodal
+  CNN — are **not** produced by any notebook here. They come from separate runs
+  saved under `results/experiment_json/`. Only the two MM-Net rows trace to
+  notebook 1, cell 6.
+- **Notebooks 1–3 cannot be re-executed** in this repository: they read
+  `data/mm_features/`, which holds access-controlled clinical PSG and is
+  gitignored. Their saved outputs are the record. The metric layer *can* be
+  rechecked without the data, via `scripts/verify_headline.py`.
+- **The paper reports 0.86 M parameters; notebook 3 prints `params: 773254`.**
+  The repository's own saved output contradicts the manuscript here. The results
+  CSVs have been corrected to 0.773 M — see
+  [REPRODUCIBILITY.md](REPRODUCIBILITY.md) §4a. The paper still needs the same fix.
+- Several recomputed metrics differ from the recorded values by more than
+  rounding (REM F1 by 0.031, central-apnea AUC by 0.024, respiratory AP by
+  0.019). Quantified in [REPRODUCIBILITY.md](REPRODUCIBILITY.md) §3.
+
 ## Data
 
 The iSLEEPS recordings are access-controlled clinical polysomnography and are
