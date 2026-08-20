@@ -91,6 +91,22 @@ See VERIFICATION_LOG row 4.
 - Predicted per-patient event burden correlates with clinical AHI
   (Spearman ρ = 0.315, p = 0.002, n = 96).
 
+## Submission
+
+| Deliverable | Link |
+|---|---|
+| **Overleaf project** (read-only) | https://www.overleaf.com/read/jbmwndgzsqgz#79f973 |
+| **Primary code repository** | https://github.com/wshuv-o/isleeps-sleep-staging |
+| **This repository** (reproducibility & verification) | https://github.com/EsmeAbha/iSleep_experiments |
+| **Co-author repository** | https://github.com/Imtiaj-Sajin/Ischemic-Stroke-research-works |
+
+**Target journal:** IEEE Journal of Biomedical and Health Informatics (JBHI).
+
+[`FINAL_SUBMISSION.zip`](FINAL_SUBMISSION.zip) in this repository holds the full
+submission bundle: the compiled manuscript, the Overleaf project sources, the AI
+review report, the response to that review, the target-journal justification, the
+contributions statement, and the guide-compliance write-up.
+
 ## Environment and hardware
 
 Taken from the saved notebook metadata and cell outputs, not reconstructed.
